@@ -7,6 +7,13 @@ namespace Varakin_Oleg_PRI_121_LR_7
 {
     public partial class Form1 : Form
     {
+        double cubeX = 50;
+        double cubeY = 100;
+        double cubeZ = 0.0;
+        double splineAngle = 0;  // Угол вращения
+        double[] splineControlPoints = { 0, 30, 60, 90 };  // Контрольные точки для сплайна
+        double splineTime = 0;   // Время (используется для интерполяции)
+        double splineSpeed = 0.05; // Скорость вращения по сплайну
         int angle = 5, angleX = -90, angleY = 0, angleZ = 90;
         double translateX = 250, translateY = -40, translateZ = -50;
         int alpha = 0;
@@ -40,7 +47,7 @@ namespace Varakin_Oleg_PRI_121_LR_7
             Gl.glLoadIdentity();
             Gl.glEnable(Gl.GL_DEPTH_TEST);
             loadImage();
-            Bitmap fractalBitmap = GenerateMandelbrotFractal(500, 500, -2.5, 1.5, -2, 2);
+            Bitmap fractalBitmap = GenerateFernFractal(500, 500, 10000);
             ApplyTexture(fractalBitmap);
             RenderTimer.Start();
         }
@@ -72,6 +79,23 @@ namespace Varakin_Oleg_PRI_121_LR_7
             {
                 translateX = translateX + Math.Cos(((angleZ - 90) * Math.PI) / 180);
                 translateY = translateY - Math.Sin(((angleZ - 90) * Math.PI) / 180);
+            }
+
+            if (e.KeyCode == Keys.H)
+            {
+                cubeY += 1;
+            }
+            if (e.KeyCode == Keys.K)
+            {
+                cubeY -= 1;
+            }
+            if (e.KeyCode == Keys.J)
+            {
+                cubeX -= 1;
+            }
+            if (e.KeyCode == Keys.U)
+            {
+                cubeX += 1;
             }
 
             if (e.KeyCode == Keys.Q)
@@ -106,6 +130,24 @@ namespace Varakin_Oleg_PRI_121_LR_7
                 Gl.glVertex3d(-1000, -500, 0);
                 Gl.glVertex3d(1000, -500, 0);
                 Gl.glEnd();
+
+                //Солнце
+                Gl.glPushMatrix();
+                Gl.glTranslated(500, 500, 400);
+                Gl.glColor3f(1.0f * lightIntensity, 1.0f * lightIntensity, 0.0f * lightIntensity);
+                Gl.glRotatef((float)splineAngle, 0, 1, 0);
+                Glut.glutSolidCube(100);
+                Gl.glPopMatrix();
+
+                splineTime += splineSpeed;
+                splineAngle = cubicSpline(splineTime, splineControlPoints);
+
+                //Башмаки
+                Gl.glPushMatrix();
+                Gl.glTranslated(cubeX, cubeY, cubeZ);
+                Gl.glColor3f(0.0f, 0.0f, 1.0f * lightIntensity);
+                Glut.glutSolidCube(20);          
+                Gl.glPopMatrix();
 
                 // Включаем текстуры
                 Gl.glEnable(Gl.GL_TEXTURE_2D);
@@ -346,7 +388,7 @@ namespace Varakin_Oleg_PRI_121_LR_7
                 // Если нужно преобразовать в черно-белое
                 if (isGrayscale)
                 {
-                    bmp = ConvertToGrayscale(bmp);
+                    bmp = ConvertToGrayscaleWithBlur(bmp);
                 }
 
                 BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
@@ -361,11 +403,12 @@ namespace Varakin_Oleg_PRI_121_LR_7
             textureIsLoad = true;
         }
 
-        private Bitmap ConvertToGrayscale(Bitmap original)
+        private Bitmap ConvertToGrayscaleWithBlur(Bitmap original)
         {
             // Создаем новое изображение того же размера
             Bitmap grayscaleBitmap = new Bitmap(original.Width, original.Height);
 
+            // Преобразуем в оттенки серого и размазываем
             for (int y = 0; y < original.Height; y++)
             {
                 for (int x = 0; x < original.Width; x++)
@@ -376,13 +419,46 @@ namespace Varakin_Oleg_PRI_121_LR_7
                     // Вычисляем среднее значение для цвета пикселя для получения оттенка серого
                     int grayValue = (int)(pixelColor.R * 0.3 + pixelColor.G * 0.59 + pixelColor.B * 0.11);
 
-                    // Применяем серый цвет к новому изображению
-                    Color grayColor = Color.FromArgb(grayValue, grayValue, grayValue);
+                    // Размытие: суммируем соседние пиксели
+                    int blurValue = ApplyBlur(original, x, y);
+
+                    // Применяем серый цвет и эффект размытия к новому изображению
+                    Color grayColor = Color.FromArgb(blurValue, blurValue, blurValue);
                     grayscaleBitmap.SetPixel(x, y, grayColor);
                 }
             }
 
             return grayscaleBitmap;
+        }
+
+        private int ApplyBlur(Bitmap original, int x, int y)
+        {
+            int blurRadius = 3; // Радиус размытия
+            int blurSum = 0;
+            int count = 0;
+
+            // Проходим по ближайшим пикселям вокруг текущего
+            for (int dy = -blurRadius; dy <= blurRadius; dy++)
+            {
+                for (int dx = -blurRadius; dx <= blurRadius; dx++)
+                {
+                    int neighborX = x + dx;
+                    int neighborY = y + dy;
+
+                    // Убедимся, что соседний пиксель внутри границ изображения
+                    if (neighborX >= 0 && neighborX < original.Width && neighborY >= 0 && neighborY < original.Height)
+                    {
+                        // Получаем цвет соседнего пикселя и вычисляем его оттенок серого
+                        Color neighborColor = original.GetPixel(neighborX, neighborY);
+                        int neighborGrayValue = (int)(neighborColor.R * 0.3 + neighborColor.G * 0.59 + neighborColor.B * 0.11);
+                        blurSum += neighborGrayValue;
+                        count++;
+                    }
+                }
+            }
+
+            // Возвращаем усредненное значение для размытого пикселя
+            return (int)(blurSum / count);
         }
 
         private static uint MakeGlTexture(int Format, IntPtr pixels, int w, int h)
@@ -427,40 +503,54 @@ namespace Varakin_Oleg_PRI_121_LR_7
 
         }
 
-        private Bitmap GenerateMandelbrotFractal(int width, int height, double minRe, double maxRe, double minIm, double maxIm)
+        private Bitmap GenerateFernFractal(int width, int height, int maxIterations)
         {
             Bitmap bitmap = new Bitmap(width, height);
 
-            // Параметры фрактала
-            double reFactor = (maxRe - minRe) / width;
-            double imFactor = (maxIm - minIm) / height;
+            // Центрируем фрактал в центре изображения
+            double x = 0, y = 0;
 
-            for (int x = 0; x < width; x++)
+            Random random = new Random();
+
+            // Итерации
+            for (int i = 0; i < maxIterations; i++)
             {
-                for (int y = 0; y < height; y++)
+                // Рандомно выбираем одно из четырех отображений
+                double nextX = 0, nextY = 0;
+                double rand = random.NextDouble();
+
+                if (rand < 0.01) // 1% случаев
                 {
-                    double cRe = minRe + x * reFactor;
-                    double cIm = minIm + y * imFactor;
+                    nextX = 0;
+                    nextY = 0.16 * y;
+                }
+                else if (rand < 0.86) // 85% случаев
+                {
+                    nextX = 0.85 * x + 0.04 * y;
+                    nextY = -0.04 * x + 0.85 * y + 1.6;
+                }
+                else if (rand < 0.93) // 7% случаев
+                {
+                    nextX = 0.2 * x - 0.26 * y;
+                    nextY = 0.23 * x + 0.22 * y + 1.6;
+                }
+                else // 7% случаев
+                {
+                    nextX = -0.15 * x + 0.28 * y;
+                    nextY = 0.26 * x + 0.24 * y + 0.44;
+                }
 
-                    double zRe = cRe, zIm = cIm;
-                    int iteration = 0;
-                    int maxIterations = 1000;
+                x = nextX;
+                y = nextY;
 
-                    // Итерации для проверки, выходит ли точка за пределы
-                    while (zRe * zRe + zIm * zIm <= 4 && iteration < maxIterations)
-                    {
-                        double zReTemp = zRe * zRe - zIm * zIm + cRe;
-                        zIm = 2 * zRe * zIm + cIm;
-                        zRe = zReTemp;
+                // Преобразуем координаты в пиксели
+                int px = (int)(width / 2 + x * width / 10); // Масштабируем
+                int py = (int)(height - (y * height / 12)); // Масштабируем и переворачиваем по оси Y
 
-                        iteration++;
-                    }
-
-                    // Вычисление цвета пикселя
-                    int colorValue = (int)(255 * (double)iteration / maxIterations);
-                    Color pixelColor = Color.FromArgb(colorValue, colorValue, colorValue);
-
-                    bitmap.SetPixel(x, y, pixelColor);
+                if (px >= 0 && px < width && py >= 0 && py < height)
+                {
+                    // Цвет пикселя (можно сделать его более красивым, например, через градиент)
+                    bitmap.SetPixel(px, py, Color.Green);  // Используем зеленый цвет для фрактала
                 }
             }
 
@@ -478,5 +568,17 @@ namespace Varakin_Oleg_PRI_121_LR_7
 
             textureIsLoad = true;
         }
+
+        double cubicSpline(double t, double[] controlPoints)
+        {
+            // Интерполяция по кубическому сплайну
+            double t2 = t * t;
+            double t3 = t2 * t;
+            return controlPoints[0] * (1 - 3 * t2 + 2 * t3) +
+                   controlPoints[1] * (3 * t2 - 2 * t3) +
+                   controlPoints[2] * (t - 2 * t2 + t3) +
+                   controlPoints[3] * (-t2 + t3);
+        }
+
     }
 }

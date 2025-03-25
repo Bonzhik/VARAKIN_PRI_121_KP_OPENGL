@@ -33,6 +33,7 @@
             RenderTimer = new System.Windows.Forms.Timer(components);
             button1 = new Button();
             label1 = new Label();
+            label2 = new Label();
             SuspendLayout();
             // 
             // AnT
@@ -75,11 +76,21 @@
             label1.TabIndex = 2;
             label1.Text = "W,A,S,D,Q,E - Управление камерой";
             // 
+            // label2
+            // 
+            label2.AutoSize = true;
+            label2.Location = new Point(931, 74);
+            label2.Name = "label2";
+            label2.Size = new Size(205, 15);
+            label2.TabIndex = 3;
+            label2.Text = "U,H,J,K - Управление ботинками X,Y";
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1167, 602);
+            Controls.Add(label2);
             Controls.Add(label1);
             Controls.Add(button1);
             Controls.Add(AnT);
@@ -96,5 +107,6 @@
         private System.Windows.Forms.Timer RenderTimer;
         private Button button1;
         private Label label1;
+        private Label label2;
     }
 }
