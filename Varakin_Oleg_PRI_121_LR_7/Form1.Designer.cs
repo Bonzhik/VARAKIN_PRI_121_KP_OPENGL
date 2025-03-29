@@ -34,6 +34,7 @@
             button1 = new Button();
             label1 = new Label();
             label2 = new Label();
+            button2 = new Button();
             SuspendLayout();
             // 
             // AnT
@@ -70,7 +71,7 @@
             // label1
             // 
             label1.AutoSize = true;
-            label1.Location = new Point(931, 48);
+            label1.Location = new Point(931, 101);
             label1.Name = "label1";
             label1.Size = new Size(198, 15);
             label1.TabIndex = 2;
@@ -79,17 +80,28 @@
             // label2
             // 
             label2.AutoSize = true;
-            label2.Location = new Point(931, 74);
+            label2.Location = new Point(931, 129);
             label2.Name = "label2";
             label2.Size = new Size(205, 15);
             label2.TabIndex = 3;
             label2.Text = "U,H,J,K - Управление ботинками X,Y";
+            // 
+            // button2
+            // 
+            button2.Location = new Point(905, 50);
+            button2.Name = "button2";
+            button2.Size = new Size(250, 23);
+            button2.TabIndex = 4;
+            button2.Text = "Включить/Выключить дождь";
+            button2.UseVisualStyleBackColor = true;
+            button2.Click += button2_Click;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1167, 602);
+            Controls.Add(button2);
             Controls.Add(label2);
             Controls.Add(label1);
             Controls.Add(button1);
@@ -108,5 +120,6 @@
         private Button button1;
         private Label label1;
         private Label label2;
+        private Button button2;
     }
 }

@@ -1,19 +1,30 @@
 using System.Drawing.Imaging;
+using System.Media;
+using System.Runtime.InteropServices;
 using Tao.DevIl;
 using Tao.FreeGlut;
 using Tao.OpenGl;
 
 namespace Varakin_Oleg_PRI_121_LR_7
 {
+    public class RainParticle
+    {
+        public float X, Y, Z;
+        public float SpeedZ;
+    }
     public partial class Form1 : Form
     {
+        private Random rand = new Random();
+        private List<RainParticle> rainParticles = new List<RainParticle>();
+        private bool isRaining = false;
+        private SoundPlayer rainSound;
         double cubeX = 50;
         double cubeY = 100;
         double cubeZ = 0.0;
-        double splineAngle = 0;  // Угол вращения
-        double[] splineControlPoints = { 0, 30, 60, 90 };  // Контрольные точки для сплайна
-        double splineTime = 0;   // Время (используется для интерполяции)
-        double splineSpeed = 0.05; // Скорость вращения по сплайну
+        double splineAngle = 0;
+        double[] splineControlPoints = { 0, 30, 60, 90 };
+        double splineTime = 0;
+        double splineSpeed = 0.05;
         int angle = 5, angleX = -90, angleY = 0, angleZ = 90;
         double translateX = 250, translateY = -40, translateZ = -50;
         int alpha = 0;
@@ -29,6 +40,7 @@ namespace Varakin_Oleg_PRI_121_LR_7
         public Form1()
         {
             InitializeComponent();
+            rainSound = new SoundPlayer("rain_sound.wav");
             AnT.InitializeContexts();
         }
 
@@ -55,6 +67,10 @@ namespace Varakin_Oleg_PRI_121_LR_7
         private void RenderTimer_Tick(object sender, EventArgs e)
         {
             currentTextureIndex = (currentTextureIndex + 1) % spriteTextures.Length;
+            if (isRaining)
+            {
+                UpdateRain();
+            }
             Draw();
         }
 
@@ -122,6 +138,19 @@ namespace Varakin_Oleg_PRI_121_LR_7
                 Gl.glRotated(angleX, 1, 0, 0); Gl.glRotated(angleY, 0, 1, 0); Gl.glRotated(angleZ, 0, 0, 1);
                 Gl.glTranslated(translateX, translateY, translateZ);
 
+                //Дождь
+                if (isRaining)
+                {
+                    Gl.glPointSize(2.0f);
+                    Gl.glBegin(Gl.GL_POINTS);
+                    Gl.glColor3f(0.0f, 0.0f, 1.0f);
+                    foreach (var particle in rainParticles)
+                    {
+                        Gl.glVertex3f(particle.X, particle.Y, particle.Z);
+                    }
+                    Gl.glEnd();
+                }
+
                 //Земля
                 Gl.glColor3f(0.1f * lightIntensity, 0.1f * lightIntensity, 0.1f * lightIntensity);
                 Gl.glBegin(Gl.GL_QUADS);
@@ -146,7 +175,7 @@ namespace Varakin_Oleg_PRI_121_LR_7
                 Gl.glPushMatrix();
                 Gl.glTranslated(cubeX, cubeY, cubeZ);
                 Gl.glColor3f(0.0f, 0.0f, 1.0f * lightIntensity);
-                Glut.glutSolidCube(20);          
+                Glut.glutSolidCube(20);
                 Gl.glPopMatrix();
 
                 // Включаем текстуры
@@ -408,30 +437,62 @@ namespace Varakin_Oleg_PRI_121_LR_7
             // Создаем новое изображение того же размера
             Bitmap grayscaleBitmap = new Bitmap(original.Width, original.Height);
 
-            // Преобразуем в оттенки серого и размазываем
-            for (int y = 0; y < original.Height; y++)
+            // Создаем массивы пикселей для исходного изображения и для нового изображения
+            BitmapData originalData = original.LockBits(new Rectangle(0, 0, original.Width, original.Height),
+                ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            BitmapData grayscaleData = grayscaleBitmap.LockBits(new Rectangle(0, 0, original.Width, original.Height),
+                ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+
+            int width = original.Width;
+            int height = original.Height;
+            int stride = originalData.Stride;
+            IntPtr originalScan0 = originalData.Scan0;
+            IntPtr grayscaleScan0 = grayscaleData.Scan0;
+
+            // Работаем с массивами байтов для ускорения обработки
+            byte[] originalBytes = new byte[height * stride];
+            byte[] grayscaleBytes = new byte[height * stride];
+
+            Marshal.Copy(originalScan0, originalBytes, 0, originalBytes.Length);
+
+            // Применяем размытие и преобразование в оттенки серого
+            for (int y = 0; y < height; y++)
             {
-                for (int x = 0; x < original.Width; x++)
+                for (int x = 0; x < width; x++)
                 {
+                    // Индекс пикселя в массиве байтов
+                    int pixelIndex = (y * stride) + (x * 4);
+
                     // Получаем текущий цвет пикселя
-                    Color pixelColor = original.GetPixel(x, y);
+                    byte b = originalBytes[pixelIndex];
+                    byte g = originalBytes[pixelIndex + 1];
+                    byte r = originalBytes[pixelIndex + 2];
 
-                    // Вычисляем среднее значение для цвета пикселя для получения оттенка серого
-                    int grayValue = (int)(pixelColor.R * 0.3 + pixelColor.G * 0.59 + pixelColor.B * 0.11);
+                    // Вычисляем оттенок серого
+                    int grayValue = (int)(r * 0.3 + g * 0.59 + b * 0.11);
 
-                    // Размытие: суммируем соседние пиксели
-                    int blurValue = ApplyBlur(original, x, y);
+                    // Применяем размытие с учетом соседних пикселей
+                    int blurValue = ApplyBlur(originalBytes, x, y, width, height, stride);
 
                     // Применяем серый цвет и эффект размытия к новому изображению
-                    Color grayColor = Color.FromArgb(blurValue, blurValue, blurValue);
-                    grayscaleBitmap.SetPixel(x, y, grayColor);
+                    grayscaleBytes[pixelIndex] = (byte)blurValue;
+                    grayscaleBytes[pixelIndex + 1] = (byte)blurValue;
+                    grayscaleBytes[pixelIndex + 2] = (byte)blurValue;
+                    grayscaleBytes[pixelIndex + 3] = 255; // Альфа-канал (полностью непрозрачный)
                 }
             }
+
+            // Копируем измененные байты обратно в изображение
+            Marshal.Copy(grayscaleBytes, 0, grayscaleScan0, grayscaleBytes.Length);
+
+            // Разблокируем память
+            original.UnlockBits(originalData);
+            grayscaleBitmap.UnlockBits(grayscaleData);
 
             return grayscaleBitmap;
         }
 
-        private int ApplyBlur(Bitmap original, int x, int y)
+        private int ApplyBlur(byte[] imageBytes, int x, int y, int width, int height, int stride)
         {
             int blurRadius = 3; // Радиус размытия
             int blurSum = 0;
@@ -446,11 +507,19 @@ namespace Varakin_Oleg_PRI_121_LR_7
                     int neighborY = y + dy;
 
                     // Убедимся, что соседний пиксель внутри границ изображения
-                    if (neighborX >= 0 && neighborX < original.Width && neighborY >= 0 && neighborY < original.Height)
+                    if (neighborX >= 0 && neighborX < width && neighborY >= 0 && neighborY < height)
                     {
-                        // Получаем цвет соседнего пикселя и вычисляем его оттенок серого
-                        Color neighborColor = original.GetPixel(neighborX, neighborY);
-                        int neighborGrayValue = (int)(neighborColor.R * 0.3 + neighborColor.G * 0.59 + neighborColor.B * 0.11);
+                        // Индекс соседнего пикселя в массиве байтов
+                        int neighborIndex = (neighborY * stride) + (neighborX * 4);
+
+                        // Получаем цвет соседнего пикселя
+                        byte b = imageBytes[neighborIndex];
+                        byte g = imageBytes[neighborIndex + 1];
+                        byte r = imageBytes[neighborIndex + 2];
+
+                        // Вычисляем оттенок серого
+                        int neighborGrayValue = (int)(r * 0.3 + g * 0.59 + b * 0.11);
+
                         blurSum += neighborGrayValue;
                         count++;
                     }
@@ -580,5 +649,62 @@ namespace Varakin_Oleg_PRI_121_LR_7
                    controlPoints[3] * (-t2 + t3);
         }
 
+        private void button2_Click(object sender, EventArgs e)
+        {
+            isRaining = !isRaining;
+            if (isRaining)
+            {
+                rainSound.PlayLooping();
+                GenerateRainParticles();
+            }
+            else
+            {
+                rainSound.Stop();
+                rainParticles.Clear();
+            }
+        }
+
+        private void GenerateRainParticles()
+        {
+            rainParticles.Clear();
+            for (int i = 0; i < 5000; i++)
+            {
+                float x, y;
+                do
+                {
+                    x = (float)(rand.NextDouble() * 1000 - 500);
+                    y = (float)(rand.NextDouble() * 1000 - 500);
+                } while (x > -100 && x < 200 && y > -10 && y < 200);
+
+                rainParticles.Add(new RainParticle()
+                {
+                    X = x,
+                    Z = (float)(rand.NextDouble() * 300 + 100),
+                    Y = y,
+                    SpeedZ = (float)(rand.NextDouble() * 4 + 10)
+                });
+            }
+        }
+
+        private void UpdateRain()
+        {
+            foreach (var particle in rainParticles)
+            {
+                particle.Z -= particle.SpeedZ;
+                if (particle.Z < 0)
+                {
+                    float x, y;
+                    do
+                    {
+                        x = (float)(rand.NextDouble() * 1000 - 500);
+                        y = (float)(rand.NextDouble() * 1000 - 500);
+                    } while (x > -100 && x < 200 && y > -10 && y < 200);
+
+                    particle.X = x;
+                    particle.Y = y;
+                    particle.Z = 500;
+                }
+            }
+        }
     }
 }
